@@ -12,7 +12,7 @@ int main(int argc, const char *argv[]) {
   auto rank = MPI::COMM_WORLD.Get_rank();
 
   if (rank == 0) {
-
+    printf("argc:%d",argc);
     assert(argc == 3);
 
     auto outfile = argv[1];
@@ -40,7 +40,7 @@ int main(int argc, const char *argv[]) {
 
     auto create_random_record = [&]() {
       data_t ret;
-      ret.key = key_dist(gen);
+      ret.key = key_dist(gen)%100;
       for (int i = 0; i < 12; ++i)
         ret.payload[i] = payload_dist(gen);
       return ret;
