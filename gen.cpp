@@ -16,7 +16,7 @@ int main(int argc, const char *argv[]) {
     assert(argc == 3);
 
     auto outfile = argv[1];
-    auto num_records = std::stoi(argv[2]);
+    auto num_records = std::stol(argv[2]);
 
     int block_lens[2] = {1, 12};
 
@@ -46,7 +46,7 @@ int main(int argc, const char *argv[]) {
       return ret;
     };
 
-    for (int i = 0; i < num_records; ++i) {
+    for (long i = 0; i < num_records; ++i) {
       auto random_record = create_random_record();
 
       MPI::Status status;

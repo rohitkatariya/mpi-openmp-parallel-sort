@@ -11,4 +11,9 @@ my:psort.cpp a4.cpp
 	# time mpirun -np 4 ./a.out
 	#mpirun -np 6 ./a.out
 	#cat output_dir/inp_0.txt output_dir/inp_1.txt output_dir/inp_2.txt output_dir/inp_3.txt
-	#cat output_dir/out_0.txt output_dir/out_1.txt output_dir/out_2.txt output_dir/out_3.txt
+	#cat outputy_dir/out_0.txt output_dir/out_1.txt output_dir/out_2.txt output_dir/out_3.txt
+gen:gen.cpp
+	mpic++ gen.cpp -o gen.out
+	mpirun -np 1 ./gen.out input_dir/inputfile100 100
+	mpirun -np 1 ./gen.out input_dir/inputfile1000 1000
+	mpirun -np 1 ./gen.out input_dir/inputfile100000 100000

@@ -51,21 +51,32 @@ dataset_t pSort::read(const char *in_file){
     dataset_t this_dataset;
     this_dataset.data = new data_t[num_ele_this_proc];
     this_dataset.n = int(num_ele_this_proc);
+    MPI_Offset offset_this = (chunk_size*myRank + min(myRank,int(num_ele_file%nProcs)))*sizeof(mpi_data_t);
     MPI_File_read_at(mpi_file, (chunk_size*myRank + min(myRank,int(num_ele_file%nProcs)))*sizeof(mpi_data_t), this_dataset.data, num_ele_this_proc, mpi_data_t,&read_status);
     
     // MPI_File_read_at(mpi_file, chunk_size*myRank,data_this_proc, chunk_size, mpi_data_t,&read_status);
     int num_read = 0;
     MPI_Get_count(&read_status, mpi_data_t,&num_read);
-    printf("\n%d\tOffset:%ld,\tnum_read:%d\tnum_ele_this_proc:%ld",myRank,chunk_size*myRank,num_read,num_ele_this_proc);
+    if(num_read!=num_ele_this_proc)
+        printf("\n%d\tOffset:%ld,\tnum_read:%d\tnum_ele_this_proc:%ld",myRank,offset_this,num_read,num_ele_this_proc);
     assert(num_read==num_ele_this_proc);
     // for(int i=0;i<num_read;i++)
     //     cout<<"\t"<<this_dataset.data[i].key;
     MPI_File_close(&mpi_file);
-    for(int i=0;i<num_read ;i++){
-        this_dataset.data[i].payload[3]='\0';
-        printf("\t(%d,%s)",this_dataset.data[i].key,this_dataset.data[i].payload);
+    //for(int i=0;i<min(num_read,5) ;i++){
+    //    this_dataset.data[i].payload[3]='\0';
+    //    printf("\t(%d,%s)",this_dataset.data[i].key,this_dataset.data[i].payload);
+    //}
+    ofstream fout;
+    fout.open("output_dir/in_"+ to_string(myRank)+".txt");
+    printf("\nWriting %d elements.",this_dataset.n);
+    fout<<"\n myRank:"<<myRank<<"\n";
+    for(int i=0; i<this_dataset.n;i++){
+        fout<<"\t"<<this_dataset.data[i].key<<","<<this_dataset.data[i].payload[0];
+        if(i%10==9)
+            fout<<"\n"<<myRank;
     }
-    
+    fout.close();
     return this_dataset;
 }
 
