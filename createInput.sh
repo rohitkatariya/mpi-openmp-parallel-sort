@@ -30,7 +30,7 @@ module load compiler/gcc/6.5/openmpi/4.0.2
 #time -p mpirun -np $PBS_NTASKS a.out /home/cse/phd/csz208844/file_transfer/chhavi/out_file> $PBS_JOBID
 #time -p mpirun -np $PBS_NTASKS a.out input_dir/inputfile100000> $PBS_JOBID
 #time -p mpirun -np $PBS_NTASKS a.out input_dir/inputfile100000> $PBS_JOBID
-time -p mpirun -np 1 ./gen.out input_dir/inputfile4294967296 4294967296
+time -p mpirun -np 1 ./gen.out ~/scratch/parallel_prog/inputfile4294967296 4294967296
 #NOTE
 # The job line is an example : users need to change it to suit their applications
 # The PBS select statement picks n nodes each having m free processors
