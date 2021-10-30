@@ -61,6 +61,11 @@ dataset_t pSort::read(const char *in_file){
     // for(int i=0;i<num_read;i++)
     //     cout<<"\t"<<this_dataset.data[i].key;
     MPI_File_close(&mpi_file);
+    for(int i=0;i<num_read ;i++){
+        this_dataset.data[i].payload[3]='\0';
+        printf("\t(%d,%s)",this_dataset.data[i].key,this_dataset.data[i].payload);
+    }
+    
     return this_dataset;
 }
 

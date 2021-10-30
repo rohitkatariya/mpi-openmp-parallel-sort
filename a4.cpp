@@ -13,7 +13,7 @@ int main(int argc, char *argv[]) {
     printf("\nreading file %s",argv[1]);
     #endif
     dataset_t this_ds = p.read(argv[1]);
-    p.sort(this_ds,TWO);
+    // p.sort(this_ds,TWO);
     // int myRank;
     // int nProcs;
     // MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
