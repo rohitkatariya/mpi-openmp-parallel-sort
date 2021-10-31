@@ -19,17 +19,6 @@ using namespace std;
 #define DEBUGOUT
 // #define DEBUG
 
-
-
-
-// MPI_Datatype DataObjMPIStruct;
-// MPI_Datatype DataObj_T[2] = {MPI_UNSIGNED,MPI_CHAR};
-// int DataObj_B[2]  = {1, 12};//block lengths
-// MPI_Aint DataObj_D[2]  = {offsetof(data_t, key), offsetof(data_t, payload)};//offsets
-// MPI_Type_create_struct(2, DataObj_B, DataObj_D, DataObj_T, &DataObjMPIStruct);
-// MPI_Type_commit(&DataObjMPIStruct);
-
-// void mpifileToTxt(const char *in_file,const char *out_file);
 void pSort::close(){}
 void pSort::init(){}
 
@@ -132,11 +121,6 @@ void s_merge_sort_arr(T *data,int start_idx,int end_idx){
     // shared memory merge sort using openmp tasks
     int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
-    #ifdef DEBUG
-        if(myRank==0)
-            printf("\n calling merge sort on %d,%d",start_idx,end_idx);
-    #endif
-
     if(start_idx>=end_idx)
         return;
     int mid_idx=(start_idx+end_idx)/2;
@@ -167,8 +151,8 @@ int select_splitters(int *splitters,int num_elements, int nProcs){
 }
 
 void merge_multiple(data_t *data_arr, int *start_locations, int new_n_ele){
-    // CAUTION: remove hardcoded openmp numthreads
-    #pragma omp parallel num_threads(4)
+    
+    #pragma omp parallel
         #pragma omp single  
             s_merge_sort_arr(data_arr,0,new_n_ele-1);
 }
@@ -181,8 +165,8 @@ void sort2(dataset_t dataset){
 
     // Sort internally first 
     
-    // CAUTION: remove hardcoded openmp numthreads
-    #pragma omp parallel num_threads(4)
+    
+    #pragma omp parallel 
     {
         #pragma omp single       
         { 
@@ -235,8 +219,8 @@ void sort2(dataset_t dataset){
         int total_num_splitters = splitter_idx;
         
         // Sort splitters received
-        // CAUTION: remove hardcoded openmp numthreads
-        #pragma omp parallel num_threads(4)
+        
+        #pragma omp parallel 
             #pragma omp single  
                 s_merge_sort_arr(splitters_all,0,total_num_splitters-1);
         
@@ -360,14 +344,6 @@ void sort2(dataset_t dataset){
         data_offsets_new[i]=data_offsets_new[i-1]+n_new_list[i];
         data_offsets_old[i]=data_offsets_old[i-1]+n_orig_list[i];
     }
-    // if(myRank==0){
-    //     printf("\nprinting offsets old\n");
-    //     for( int i=0;i<nProcs;i++)
-    //         cout<<data_offsets_old[i]<<",";
-    //     printf("\nprinting offsets new\n");
-    //     for( int i=0;i<nProcs;i++)
-    //         cout<<data_offsets_new[i]<<",";
-    // }
     long new_data_start_here=0;
     if(myRank!=0)
         new_data_start_here = data_offsets_new[myRank-1];
@@ -377,7 +353,6 @@ void sort2(dataset_t dataset){
     if(myRank!=0)
         orig_data_start_here = data_offsets_old[myRank-1];
     long orig_data_end_here=data_offsets_old[myRank]-1;
-    // MPI_Isend(const void *buf, int count, MPI_Datatype datatype, int dest, int tag,MPI_Comm comm, MPI_Request *request)
     // sending new items to correct locations
     vector<MPI_Request> sendDataRequests; 
     vector<MPI_Request> receiveDataRequests; 
@@ -480,97 +455,6 @@ void pSort::sort(dataset_t dataset, sorter_t type){
     }
 }
 
-void mpifileToTxt(const char *in_file,const char *out_file){
-    int myRank;
-    int nProcs;
-    MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
-    MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
-    
-    // reading file start
-    MPI_File mpi_file;
-    MPI_File_open(MPI_COMM_WORLD, in_file,  MPI_MODE_RDONLY,MPI_INFO_NULL,&mpi_file);
-    MPI_Status read_status;
-    MPI_Offset num_ele_file = 0;
-    //fetching number of elements in file
-    MPI_File_get_size(mpi_file,&num_ele_file);
-    num_ele_file = num_ele_file/sizeof(data_t);
-    
-    dataset_t this_dataset;
-    this_dataset.data = new data_t[num_ele_file];
-    this_dataset.n = int(num_ele_file);
-    data_t dummy_data;
-    MPI::Aint base_addr = MPI::Get_address(&dummy_data);
-    MPI::Aint key_addr = MPI::Get_address(&dummy_data.key);
-    MPI::Aint payload_addr = MPI::Get_address(&dummy_data.payload[0]);
-    MPI::Aint displs[2] = {MPI_Aint_diff(key_addr, base_addr), MPI_Aint_diff(payload_addr, base_addr)};
-    MPI::Datatype types[2] = {MPI::UNSIGNED, MPI::CHAR};
-    int block_lens[2] = {1, 12};
-    auto mpi_data_t = MPI::Datatype::Create_struct(2, block_lens, displs, types);
-    mpi_data_t.Commit();
-
-    MPI_File_read_at(mpi_file,0, this_dataset.data, num_ele_file, mpi_data_t,&read_status);
-    
-    // MPI_File_read_at(mpi_file, chunk_size*myRank,data_this_proc, chunk_size, mpi_data_t,&read_status);
-    int num_read = 0;
-    MPI_Get_count(&read_status, mpi_data_t,&num_read);
-    
-    // //  CAUTION : Remove the following for loop added for testing stability
-    // for(int i=0;i<this_dataset.n;i++){
-    //     this_dataset.data[i].payload[0]=myRank+97;
-    // }
-    MPI_File_close(&mpi_file);
-    ofstream myfile;
-    myfile.open (out_file);
-    cout<<529<<" "<<out_file<<" "<<num_ele_file;
-    for(long i=0;i<num_ele_file;i++)
-        myfile << this_dataset.data[i].key<<","<<this_dataset.data[i].payload[0] <<"\n";
-    myfile.close();
-    cout<<"\n"<<533<<" "<<out_file<<" "<<num_ele_file;
-    
-    // int myRank;
-    // int nProcs;
-    // MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
-    // MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
-
-    // if(myRank!=0)
-    //     return;
-    // printf("in here");
-    // MPI_File mpi_file;
-    // MPI_File_open(MPI_COMM_WORLD, in_file,  MPI_MODE_RDONLY,MPI_INFO_NULL,&mpi_file);
-    // printf("in here");
-    // MPI_Status read_status;
-    // MPI_Offset num_ele_file = 0;
-    // //fetching number of elements in file
-    // printf("in here");
-    // MPI_File_get_size(mpi_file,&num_ele_file);
-    // num_ele_file = num_ele_file/sizeof(data_t);
-
-    // dataset_t this_dataset;
-    // this_dataset.data = new data_t[num_ele_file];
-    // this_dataset.n = int(num_ele_file);
-    
-    //     data_t dummy_data;
-    //     MPI::Aint base_addr = MPI::Get_address(&dummy_data);
-    //     MPI::Aint key_addr = MPI::Get_address(&dummy_data.key);
-    //     MPI::Aint payload_addr = MPI::Get_address(&dummy_data.payload[0]);
-    //     MPI::Aint displs[2] = {MPI_Aint_diff(key_addr, base_addr), MPI_Aint_diff(payload_addr, base_addr)};
-    //     MPI::Datatype types[2] = {MPI::UNSIGNED, MPI::CHAR};
-    //     int block_lens[2] = {1, 12};
-    //     auto mpi_data_t = MPI::Datatype::Create_struct(2, block_lens, displs, types);
-    //     mpi_data_t.Commit();
-
-
-    // MPI_File_read_at(mpi_file, num_ele_file*sizeof(mpi_data_t), this_dataset.data, num_ele_file, mpi_data_t,&read_status);
-    // MPI_File_close(&mpi_file);
-
-    // ofstream myfile;
-    // myfile.open (out_file);
-    // cout<<out_file;
-    // for(long i=0;i<num_ele_file;i++)
-    //     myfile << this_dataset.data[i].key<<","<<this_dataset.data[i].payload[0] <<"\n";
-    // myfile.close();
-}
-
 void pSort::write(dataset_t dataset, const char *out_file){
     int myRank;
     int nProcs;
@@ -578,7 +462,6 @@ void pSort::write(dataset_t dataset, const char *out_file){
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
     
     int *n_orig_list = new int32_t[nProcs];
-    // long *data_offsets = new long[nProcs];
     
     MPI_Request *mpi_recv_req = new MPI_Request[nProcs];
 
@@ -631,7 +514,7 @@ void pSort::write(dataset_t dataset, const char *out_file){
     MPI_File_write_at(mpi_file, offset_this*sizeof(mpi_data_t), dataset.data ,dataset.n, mpi_data_t, MPI_STATUS_IGNORE);
     //close file
     MPI_Barrier(MPI_COMM_WORLD);
-    // printf("\n%d\t%d\t%ld",myRank,dataset.n,offset_this);
+    delete[] n_orig_list;
+    delete[] mpi_recv_req;
     MPI_File_close(&mpi_file);
-    // mpifileToTxt(out_file,"hello.csv");
 }
