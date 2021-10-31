@@ -10,7 +10,7 @@
 ####
 #PBS -l select=1:ncpus=1:mpiprocs=1
 ### Specify "wallclock time" required for this job, hhh:mm:ss
-#PBS -l walltime=00:50:00
+#PBS -l walltime=05:50:00
 #PBS -P col730.csz208844  
 #PBS -o jobOutput.txt
 #PBS -l place=scatter
