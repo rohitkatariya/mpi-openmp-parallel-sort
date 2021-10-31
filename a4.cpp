@@ -4,6 +4,7 @@
 #include<stdio.h>
 #include <mpi.h>
 #include <fstream>
+#include <omp.h>
 #include "psort.h"
 using namespace std;
 
@@ -16,6 +17,7 @@ void mpifileToTxt2(const char *in_file,const char *out_file){
     // reading file start
     MPI_File mpi_file;
     MPI_File_open(MPI_COMM_WORLD, in_file,  MPI_MODE_RDONLY,MPI_INFO_NULL,&mpi_file);
+    
     if( myRank==0){
       MPI_Status read_status;
       MPI_Offset num_ele_file = 0;
@@ -48,6 +50,7 @@ void mpifileToTxt2(const char *in_file,const char *out_file){
 
 int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
+    printf("\nnum threads%d",omp_get_num_procs());
     pSort p;
     #ifdef DEBUG
     printf("\nreading file %s",argv[1]);

@@ -16,7 +16,7 @@
 #include <omp.h>
 #include<vector>  
 using namespace std;
-#define DEBUGOUT
+// #define DEBUGOUT
 // #define DEBUG
 
 void pSort::close(){}

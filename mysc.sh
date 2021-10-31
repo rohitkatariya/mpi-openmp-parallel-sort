@@ -8,7 +8,7 @@
 ### Specify email address to use for notification.
 #PBS -M csz208844@iitd.ac.in
 ####
-#PBS -l select=16:ncpus=3:mpiprocs=1
+###PBS -l select=16:ncpus=3:mpiprocs=1
 #PBS -l select=16:ncpus=5:mpiprocs=1:ompthreads=5
 ### Specify "wallclock time" required for this job, hhh:mm:ss
 #PBS -l walltime=00:10:00
@@ -29,7 +29,7 @@ cd $PBS_O_WORKDIR
 module load compiler/gcc/6.5/openmpi/4.0.2
 #mpirun -n 4 a.out 
 #time -p mpirun -np $PBS_NTASKS a.out /home/cse/phd/csz208844/file_transfer/chhavi/out_file> $PBS_JOBID
-time -p mpirun -np $PBS_NTASKS a.out /home/cse/phd/csz208844/scratch/parallel_prog/inputfile4294967296> $PBS_JOBID
+time -p mpirun -np $PBS_NTASKS a.out input_dir/inputfile100000> $PBS_JOBID
 
 #NOTE
 # The job line is an example : users need to change it to suit their applications
