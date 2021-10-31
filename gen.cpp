@@ -42,8 +42,11 @@ int main(int argc, const char *argv[]) {
     auto create_random_record = [&]() {
       data_t ret;
       ret.key = key_dist(gen)%MAX_VALUE;
-      for (int i = 0; i < 12; ++i)
+      for (int i = 0; i < 12; ++i){
         ret.payload[i] = payload_dist(gen);
+        // ret.payload[i] = payload_dist(gen)%26+97;
+      }
+
       return ret;
     };
 
