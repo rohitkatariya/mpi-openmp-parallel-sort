@@ -5,6 +5,7 @@
 
 #include "psort.h"
 
+#define MAX_VALUE 10000
 // ./gen ./outfile 10000
 int main(int argc, const char *argv[]) {
   MPI::Init();
@@ -40,7 +41,7 @@ int main(int argc, const char *argv[]) {
 
     auto create_random_record = [&]() {
       data_t ret;
-      ret.key = key_dist(gen)%100;
+      ret.key = key_dist(gen)%MAX_VALUE;
       for (int i = 0; i < 12; ++i)
         ret.payload[i] = payload_dist(gen);
       return ret;
