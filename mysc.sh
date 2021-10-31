@@ -8,7 +8,8 @@
 ### Specify email address to use for notification.
 #PBS -M csz208844@iitd.ac.in
 ####
-#PBS -l select=16:ncpus=1:mpiprocs=1
+#PBS -l select=16:ncpus=3:mpiprocs=1
+#PBS -l select=16:ncpus=5:mpiprocs=1:ompthreads=5
 ### Specify "wallclock time" required for this job, hhh:mm:ss
 #PBS -l walltime=00:10:00
 #PBS -P col730.csz208844  
