@@ -54,14 +54,17 @@ int main(int argc, char *argv[]) {
     int nProcs;
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
-
-    printf("\nnum threads:%d mipisize:%d",omp_get_num_procs(),nProcs);
+    if (myRank==0){
+      // printf("\nnum threads:%d mipisize:%d",omp_get_num_procs(),nProcs);
+      printf("%d,",nProcs);
+    }
     pSort p;
     #ifdef DEBUG
     printf("\nreading file %s",argv[1]);
     #endif
     dataset_t this_ds = p.read(argv[1]);
-    p.sort(this_ds,TWO);
+    p.sort(this_ds,ONE);
+    // p.sort(this_ds,TWO);
     p.write(this_ds,"output_dir/out.mpi");
     mpifileToTxt2(argv[1],"output_dir/in.csv");
     mpifileToTxt2("output_dir/out.mpi","output_dir/out.csv");

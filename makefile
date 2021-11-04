@@ -18,3 +18,4 @@ gen:gen.cpp
 	mpirun -np 1 ./gen.out input_dir/inputfile100 100
 	mpirun -np 1 ./gen.out input_dir/inputfile1000 1000
 	mpirun -np 1 ./gen.out input_dir/inputfile100000 100000
+	mpirun -np 1 ./gen.out input_dir/inputfile10000000 10000000

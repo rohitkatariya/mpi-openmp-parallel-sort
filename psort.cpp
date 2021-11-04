@@ -15,13 +15,24 @@
 #include <climits>
 #include <omp.h>
 #include<vector>  
+#include <stdint.h>
 using namespace std;
+#define MY_NUM_OMP_THREADS 3
 // #define DEBUGOUT
 // #define DEBUG
 
 void pSort::close(){}
 void pSort::init(){}
-
+long max_long(long a, long b){
+    if(a<b)
+    return b;
+    return a;
+}
+long min_long(long a, long b){
+    if(a<b)
+    return a;
+    return b;
+}
 dataset_t pSort::read(const char *in_file){
     int myRank;
     int nProcs;
@@ -152,12 +163,14 @@ int select_splitters(int *splitters,int num_elements, int nProcs){
 
 void merge_multiple(data_t *data_arr, int *start_locations, int new_n_ele){
     
-    #pragma omp parallel
+    #pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
         #pragma omp single  
             s_merge_sort_arr(data_arr,0,new_n_ele-1);
 }
 
 void sort2(dataset_t dataset){
+    // change int to uint
+
     int myRank;
     int nProcs;
     MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
@@ -166,7 +179,7 @@ void sort2(dataset_t dataset){
     // Sort internally first 
     
     
-    #pragma omp parallel 
+    #pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
     {
         #pragma omp single       
         { 
@@ -220,7 +233,7 @@ void sort2(dataset_t dataset){
         
         // Sort splitters received
         
-        #pragma omp parallel 
+        #pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
             #pragma omp single  
                 s_merge_sort_arr(splitters_all,0,total_num_splitters-1);
         
@@ -447,9 +460,376 @@ void sort2(dataset_t dataset){
     
     // printf("\n---------exiting %d",myRank);
 }
+
+
+// template<class L>
+int internalPivoting(data_t *data,long start, long end,int pivot_this){
+    long i=start-1;
+    int count_less=0;
+    int myRank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
+    for( long j=i+1;j<=end;j++){
+        if( data[j].key<pivot_this ){
+            i++;
+            count_less++;
+            // swap data[i] data[j]
+            data_t temp = data[j];
+            data[j]=data[i];
+            data[i]=temp;
+        }
+    }
+    return count_less;
+}
+
+void sQuickSort(data_t *data, long start, long end){
+    // return;
+    if(start>=end)
+        return;
+    // printf("\nstart pivot(%d, %d)",start,end);
+    long pivot_loc = start+internalPivoting(data,start+1,end,data[start].key);
+    data_t temp = data[pivot_loc];
+    data[pivot_loc] = data[start];
+    data[start]=temp;
+    if(pivot_loc>start){
+        #pragma omp task 
+        sQuickSort(data,start,pivot_loc-1);
+    }
+    if(pivot_loc<end){
+        #pragma omp task 
+        sQuickSort(data,pivot_loc+1,end);
+    }
+    #pragma omp taskwait
+}
+
+int get_proc_from_ele_idx(int32_t ele_idx, int32_t *all_counts,int nProcs){
+    int proc_num=0;
+    for(int i=0;i<nProcs;i++){
+        if(ele_idx<all_counts[i])
+            return i;
+        ele_idx-=all_counts[i];
+    }
+    return -1;
+}
+
+
+void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long start, long end,int tree_level){
+    
+    int nProcs; 
+    int myRank;
+    MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
+    MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank
+    
+    int startproc=get_proc_from_ele_idx(start,all_counts,nProcs);
+    int endproc=get_proc_from_ele_idx(end,all_counts,nProcs);
+    
+    if(myRank<startproc || myRank>endproc){
+        return;
+    }
+    #ifdef DEBUG
+    if(myRank==startproc)
+        printf("\nstarting:(start,end):(%d,%d) (%d, %d)",start,end,startproc,endproc );
+    #endif
+    if(startproc==endproc){
+        // change indexes
+        if(end==start)
+            return;
+        // printf("\nqsStart: \t%s",print_arr2(data+start-all_offsets[myRank],end-start+1).c_str());
+        sQuickSort(dataset.data, start-all_offsets[myRank], end-all_offsets[myRank]);
+        // printf("\nqsEnd: \t%s",print_arr2(data+start-all_offsets[myRank],end-start+1).c_str());
+        return;
+    }
+    
+    // MPI_Datatype PivotDataType_MPI;
+    // MPI_Datatype PivotDataType_T[3] = {MPI_CHAR, MPI_CHAR, MPI_UINT32_T};
+    // int PivotDataType_B[3]  = {1,1,1};//block lengths
+    // MPI_Aint PivotDataType_D[3]  = {offsetof(pivotStruct, b), offsetof(pivotStruct, a), offsetof(pivotStruct, x)};//offsets
+    // MPI_Type_create_struct(3, PivotDataType_B, PivotDataType_D, PivotDataType_T, &PivotDataType_MPI);
+    // MPI_Type_commit(&PivotDataType_MPI);
+    
+    
+    uint32_t pivot_key;  
+    MPI_Request *all_send_requests= new MPI_Request[nProcs];
+    if (myRank==startproc){
+        // Send pivot element to all other processors
+        int curr_starting_idx = max_long(0,start-all_offsets[myRank]);
+        pivot_key = dataset.data[curr_starting_idx].key;
+        for( int i=startproc+1; i<=endproc;i++){
+            MPI_Isend(&pivot_key, 1, MPI_UINT32_T, i, tree_level, MPI_COMM_WORLD,all_send_requests+i);
+        }
+    }
+    else{
+        MPI_Status recvStatus;
+        MPI_Recv(&pivot_key, 1, MPI_UINT32_T, startproc, tree_level, MPI_COMM_WORLD,&recvStatus);
+    }
+    
+    // do internal pivoting
+    // call internalPivoting after offsetting start end indexes
+    
+    int num_lt_pivot = 0;
+    if(myRank!=startproc)
+        num_lt_pivot = internalPivoting(dataset.data,0,min_long(end-all_offsets[myRank],all_counts[myRank]-1),pivot_key);
+    else
+        num_lt_pivot = internalPivoting(dataset.data,start-all_offsets[myRank]+1,min_long(end-all_offsets[myRank],all_counts[myRank]-1),pivot_key);
+    
+    #ifdef DEBUG
+        ofstream fout;
+        fout.open("output_dir/ipvt_"+ to_string(myRank)+".txt");
+        // fprintf(fout,"pivot (%c,%c,%d)\n",pivot_this.a,pivot_this.b,pivot_this.x);
+        if(myRank==0)
+        fout<<"\npivot:("<<pivot_this.a-97<<","<<pivot_this.b<<","<<pivot_this.x<<",nltp:"<<num_lt_pivot<<")\n";
+        fout<<"\n";
+        for(long i=max(0,start-all_offsets[myRank]); i<=min(end-all_offsets[myRank],all_counts[myRank]-1) ;i++){
+            fout<<"\t("<<data[i].a-97<<","<<data[i].b-97;//<<","<<data[i].x<<","<<i <<")";
+            if(i%10==9)
+                fout<<"\n"<<myRank;
+        }
+        fout.close();
+    #endif
+    // send receive number of elements less than pivot
+    int *num_lt_pivot_arr = new int[nProcs] ;
+    num_lt_pivot_arr[myRank] = num_lt_pivot;
+    MPI_Status status_this;
+    MPI_Status recvStatus;
+    for(int i=startproc;i<=endproc;i++){
+        if(i==myRank)
+            continue;
+        if(myRank == startproc)
+            MPI_Wait(all_send_requests+i,&status_this);
+        MPI_Isend(&num_lt_pivot, 1, MPI_INT, i, tree_level, MPI_COMM_WORLD,all_send_requests+i-startproc);
+    }
+    
+    for(int i=startproc;i<=endproc;i++){
+        if(i==myRank)
+            continue;
+        MPI_Recv(num_lt_pivot_arr+i, 1, MPI_INT, i, tree_level, MPI_COMM_WORLD,&recvStatus);
+    }
+    #ifdef DEBUG
+        if(myRank==startproc)
+            printf("\nnum_lt_pivot_arr %s",print_arr(num_lt_pivot_arr+startproc,endproc-startproc+1).c_str());
+    #endif
+    // calculate pivot location
+    long pivotLocation = start;
+    for( int i=startproc;i<=endproc;i++){
+        pivotLocation+=num_lt_pivot_arr[i];
+    }
+    #ifdef DEBUG
+    if(myRank==startproc)
+        printf("\npivot (%d,%d), pivotLocation %d",pivot_this.a-97,pivot_this.b-97,pivotLocation);
+    #endif
+    int pivotProc=get_proc_from_ele_idx(pivotLocation,all_counts,nProcs);
+    
+    data_t dummy_data;
+    MPI::Aint base_addr = MPI::Get_address(&dummy_data);
+    MPI::Aint key_addr = MPI::Get_address(&dummy_data.key);
+    MPI::Aint payload_addr = MPI::Get_address(&dummy_data.payload[0]);
+    MPI::Aint displs[2] = {MPI_Aint_diff(key_addr, base_addr), MPI_Aint_diff(payload_addr, base_addr)};
+    MPI::Datatype types[2] = {MPI::UNSIGNED, MPI::CHAR};
+    int block_lens[2] = {1, 12};
+    auto mpi_data_t = MPI::Datatype::Create_struct(2, block_lens, displs, types);
+    mpi_data_t.Commit();
+    
+    // MPI_Request pivot_sendRequest;
+    // if(myRank==startproc){
+    //     MPI_Isend(data+start-all_offsets[myRank], 1, myDataType_MPI, pivotProc, tree_level*10, MPI_COMM_WORLD,&pivot_sendRequest);
+    // }
+    // pSort::dataType pivotData_received;
+    // if(myRank==pivotProc){
+    //     MPI_Recv(&pivotData_received, 1, myDataType_MPI, startproc, tree_level*10, MPI_COMM_WORLD,MPI_STATUS_IGNORE);
+    // }
+    int right_procNo = endproc;
+    int left_procNo = startproc;
+    int send_reqs_sent = 0;
+
+    int num_swap_ele_right_procNo = num_lt_pivot_arr[right_procNo]; 
+    int num_swap_ele_left_procNo = all_counts[left_procNo]-(start-all_offsets[left_procNo])-num_lt_pivot_arr[left_procNo]-1;//subtracting 1 because pivot is in startproc
+    int right_procNo_data_start = num_lt_pivot_arr[right_procNo];
+    int left_procNo_data_start = (start-all_offsets[left_procNo]) + num_lt_pivot_arr[left_procNo]+1; //+1 because of pivot in startproc
+    // printf("\nprocno %d,%d,%d",left_procNo,pivotProc,right_procNo);
+    while((right_procNo>pivotProc) || (left_procNo<pivotProc)){
+        // if(myRank==right_procNo){
+        //     printf("\n%d(%d),%d,%d(%d)",left_procNo,num_swap_ele_left_procNo,pivotProc,right_procNo,num_swap_ele_right_procNo);
+        // }
+        if(num_swap_ele_right_procNo>num_swap_ele_left_procNo){
+            //swap num_swap_ele_left_procNo elements
+            if(num_swap_ele_left_procNo!=0){
+                if(myRank==right_procNo){//this is right processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_left_procNo, num_swap_ele_left_procNo, mpi_data_t,
+                            left_procNo, tree_level, left_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                }
+                if(myRank==left_procNo){ //this is the left processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_left_procNo, mpi_data_t, 
+                            right_procNo, tree_level, right_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                    // printf("\n###%d completed processor %d\n",myRank,left_procNo);
+                }
+                right_procNo_data_start-=num_swap_ele_left_procNo;
+                left_procNo_data_start+=num_swap_ele_left_procNo;
+            }
+            num_swap_ele_right_procNo=num_swap_ele_right_procNo-num_swap_ele_left_procNo;
+            left_procNo = left_procNo+1;
+            left_procNo_data_start = num_lt_pivot_arr[left_procNo];
+            num_swap_ele_left_procNo = all_counts[left_procNo]-num_lt_pivot_arr[left_procNo];
+        }else if(num_swap_ele_right_procNo==num_swap_ele_left_procNo){
+            if(num_swap_ele_left_procNo>0){
+                if(myRank==right_procNo){//this is right processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_left_procNo, num_swap_ele_left_procNo, mpi_data_t,
+                            left_procNo, tree_level, left_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                }
+                if(myRank==left_procNo){ //this is the left processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_left_procNo, mpi_data_t,
+                            right_procNo, tree_level, right_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                // printf("\n###%d completed processor %d,%d\n",myRank,left_procNo,right_procNo);
+                }
+            }
+            left_procNo = left_procNo+1;
+            right_procNo = right_procNo-1;
+            left_procNo_data_start = num_lt_pivot_arr[left_procNo];
+            right_procNo_data_start = num_lt_pivot_arr[right_procNo];
+            num_swap_ele_left_procNo = all_counts[left_procNo]-num_lt_pivot_arr[left_procNo];
+            num_swap_ele_right_procNo = num_lt_pivot_arr[right_procNo];
+        }else if(num_swap_ele_right_procNo<num_swap_ele_left_procNo){
+            if(num_swap_ele_right_procNo>0){
+                if(myRank==right_procNo){//this is right processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_right_procNo, num_swap_ele_right_procNo, mpi_data_t,
+                            left_procNo, tree_level, left_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                // printf("\n###%d completed processor %d\n",myRank,right_procNo);
+                }
+                if(myRank==left_procNo){ //this is the left processor
+                    // send and receive
+                    MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_right_procNo, mpi_data_t,
+                            right_procNo, tree_level, right_procNo, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                    send_reqs_sent++;
+                }
+                right_procNo_data_start-=num_swap_ele_right_procNo;
+                left_procNo_data_start+=num_swap_ele_right_procNo;
+            }
+            num_swap_ele_left_procNo=num_swap_ele_left_procNo-num_swap_ele_right_procNo;
+            right_procNo = right_procNo-1;
+            num_swap_ele_right_procNo = num_lt_pivot_arr[right_procNo];
+            right_procNo_data_start = num_lt_pivot_arr[right_procNo];
+            
+        }
+    }
+    
+    delete[] num_lt_pivot_arr;
+    //replace pivot 
+    
+    if(true){
+        if(start==pivotLocation){
+            ;
+        }else if(pivotProc==startproc ){
+            if( myRank==pivotProc){
+                data_t temp = dataset.data[start-all_offsets[pivotProc]];
+                dataset.data[start-all_offsets[pivotProc]] = dataset.data[pivotLocation-all_offsets[pivotProc]];
+                dataset.data[pivotLocation-all_offsets[pivotProc]]=temp;
+                // printf("\nmanual swap done %d",myRank);
+            }
+        }else{
+            if(myRank==startproc){
+                MPI_Sendrecv_replace(dataset.data+ (start-all_offsets[startproc]) , 1, mpi_data_t,
+                            pivotProc, tree_level, pivotProc, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            if(myRank==pivotProc){
+                MPI_Sendrecv_replace(dataset.data+(pivotLocation-all_offsets[pivotProc]), 1, mpi_data_t,
+                            startproc, tree_level, startproc, tree_level,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+        }
+    }
+    
+    if(pivotLocation>start){
+        // printf("\ncalling on left: (%d,%d) ",start,pivotLocation-1);
+        // if(tree_level<=1)
+        #pragma omp task
+            pquickSort(dataset,all_counts,all_offsets,start,pivotLocation-1,tree_level+1);
+    }
+    if(pivotLocation<end){
+        // printf("\ncalling on right: (%d,%d) ",pivotLocation+1,end);
+        // if(true or tree_level<=1)
+        #pragma omp task
+            pquickSort(dataset,all_counts,all_offsets,pivotLocation+1,end,tree_level+1);
+        
+    }
+    #pragma omp taskwait
+}
+
+
+void sort1(dataset_t dataset){
+    // printf("\nin sort1");
+    int nProcs; 
+    int myRank;
+    MPI_Comm_size(MPI_COMM_WORLD, &nProcs);// Group size
+    MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank
+    
+    // Gathering information of number of elements at each processor 
+    int32_t *all_counts = new int[nProcs];
+    MPI_Allgather( &(dataset.n), 1, MPI_INT32_T, all_counts, 1, MPI_INT32_T, MPI_COMM_WORLD);
+    
+    // Counting total number of elements to be sorted and creating an offset array useful for converting global index to processor's local index
+    long num_ele_sort = 0;
+    long *all_offsets=new long[nProcs];
+    
+    for( int i =0;i<nProcs;i++){
+        all_offsets[i]=num_ele_sort;
+        num_ele_sort+=all_counts[i];
+    }
+    // if(myRank==0){
+    //     for(int i=0;i<nProcs;i++)
+    //         cout<<all_offsets[i]<<"\t";
+    // }
+    
+    #ifdef DEBUG
+        ofstream fout;
+        fout.open("output_dir/inp_"+ to_string(myRank)+".txt");
+        fout<<"\n"<<myRank;
+        for(int i=0; i<=all_counts[myRank]-1 ;i++){
+            fout<<"\t"<<data[i].a-97<<","<<data[i].b-97;//<<","<<data[i].x<<","<<i <<")";
+        }
+        fout.close();
+    #endif
+    MPI_Barrier(MPI_COMM_WORLD);
+    #pragma omp parallel
+        #pragma omp single
+            pquickSort(dataset,all_counts,all_offsets,0,num_ele_sort-1,0);
+    //MPI_Barrier(MPI_COMM_WORLD);
+    #ifdef DEBUGOUT
+        printf("writing output to output_dir/out_%d.txt",myRank);
+        ofstream fout;
+        fout.open("output_dir/out_"+ to_string(myRank)+".txt");
+        // fprintf(fout,"pivot (%c,%c,%d)\n",pivot_this.a,pivot_this.b,pivot_this.x);
+        fout<<"\n";
+        for(int i=0; i<=all_counts[myRank]-1 && i<100;i++){
+            // fout<<"\t"<<(data[i].a-97);//<<","<<data[i].b<<","<<data[i].x<<","<<i <<")";
+            fout<<"\t"<<(data[i].a-97)<<","<<data[i].b-97; //<<","<<data[i].x<<","<<")";
+            if(i%10==9)
+                fout<<"\n";
+        }
+        fout.close();
+    #endif
+    delete[] all_counts;
+    delete[] all_offsets;
+
+}
+
 void pSort::sort(dataset_t dataset, sorter_t type){
     if(type==ONE){
-        ;
+        sort1(dataset);
     }else{
         sort2(dataset);
     }
