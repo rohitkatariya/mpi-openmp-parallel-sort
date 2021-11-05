@@ -17,7 +17,7 @@
 #include<vector>  
 #include <stdint.h>
 using namespace std;
-#define MY_NUM_OMP_THREADS 3
+//#define MY_NUM_OMP_THREADS 4
 // #define DEBUGOUT
 // #define DEBUG
 
@@ -189,7 +189,8 @@ int select_splitters(int *splitters,int num_elements, int nProcs){
 
 void merge_multiple(data_t *data_arr, int *start_locations, int new_n_ele){
     
-    #pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
+    //#pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
+    #pragma omp parallel 
         #pragma omp single  
             s_merge_sort_arr(data_arr,0,new_n_ele-1);
 }
@@ -205,7 +206,8 @@ void sort2(dataset_t dataset){
     // Sort internally first 
     
     
-    #pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
+    //#pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
+    #pragma omp parallel
     {
         #pragma omp single       
         { 
@@ -258,8 +260,9 @@ void sort2(dataset_t dataset){
         int total_num_splitters = splitter_idx;
         
         // Sort splitters received
+        //#pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
         
-        #pragma omp parallel  num_threads(MY_NUM_OMP_THREADS)
+        #pragma omp parallel  
             #pragma omp single  
                 s_merge_sort_arr(splitters_all,0,total_num_splitters-1);
         
@@ -860,7 +863,8 @@ void sort1(dataset_t dataset){
         fout.close();
     #endif
     MPI_Barrier(MPI_COMM_WORLD);
-    #pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
+    //#pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
+    #pragma omp parallel
         #pragma omp single
             pquickSort(dataset,all_counts,all_offsets,0,num_ele_sort-1,0);
     MPI_Barrier(MPI_COMM_WORLD);
