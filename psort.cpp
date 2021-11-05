@@ -21,6 +21,30 @@ using namespace std;
 // #define DEBUGOUT
 // #define DEBUG
 
+
+string print_arr(int *arr,int len_arr){
+    
+    std::ostringstream os;
+    for (int i=0;i<len_arr;i++) {
+        os << i<<",";
+    }
+ 
+    std::string str(os.str());
+    return str;
+}
+
+// string print_arr2(pSort::dataType *arr,int len_arr){
+    
+//     std::ostringstream os;
+//     os<<"[";
+//     for (int i=0;i<len_arr;i++) {
+//         os << arr[i].a-97<<",";
+//     }
+//     os<<"]";
+//     std::string str(os.str());
+//     return str;
+// }
+
 void pSort::close(){}
 void pSort::init(){}
 long max_long(long a, long b){
@@ -80,10 +104,12 @@ dataset_t pSort::read(const char *in_file){
     //     this_dataset.data[i].payload[0]=myRank+97;
     // }
     
-    if(num_read!=num_ele_this_proc)
-        printf("\n%d\tOffset:%lld,\tnum_read:%d\tnum_ele_this_proc:%ld",myRank,offset_this,num_read,num_ele_this_proc);
+    // if(num_read!=num_ele_this_proc)
+    //     printf("\n%d\tOffset:%lld,\tnum_read:%d\tnum_ele_this_proc:%ld",myRank,offset_this,num_read,num_ele_this_proc);
     assert(num_read==num_ele_this_proc);
-    
+    // for( int i =0;i<min(100,num_read);i++){
+    //     cout<<"\t"<<this_dataset.data[i].key;
+    // }
     MPI_File_close(&mpi_file);
     
     return this_dataset;
@@ -527,12 +553,15 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
     }
     #ifdef DEBUG
     if(myRank==startproc)
-        printf("\nstarting:(start,end):(%d,%d) (%d, %d)",start,end,startproc,endproc );
+        printf("\nstarting:(start,end):(%ld,%ld) (%d, %d)",start,end,startproc,endproc );
     #endif
     if(startproc==endproc){
         // change indexes
         if(end==start)
             return;
+        #ifdef DEBUG
+        printf("\n#sequential sort (%d, %d)", dataset.data[start-all_offsets[myRank]].key,dataset.data[end-all_offsets[myRank]].key);
+        #endif
         // printf("\nqsStart: \t%s",print_arr2(data+start-all_offsets[myRank],end-start+1).c_str());
         sQuickSort(dataset.data, start-all_offsets[myRank], end-all_offsets[myRank]);
         // printf("\nqsEnd: \t%s",print_arr2(data+start-all_offsets[myRank],end-start+1).c_str());
@@ -576,10 +605,10 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
         fout.open("output_dir/ipvt_"+ to_string(myRank)+".txt");
         // fprintf(fout,"pivot (%c,%c,%d)\n",pivot_this.a,pivot_this.b,pivot_this.x);
         if(myRank==0)
-        fout<<"\npivot:("<<pivot_this.a-97<<","<<pivot_this.b<<","<<pivot_this.x<<",nltp:"<<num_lt_pivot<<")\n";
+        fout<<"\npivot:("<<pivot_key<<","<<",nltp:"<<num_lt_pivot<<")\n";
         fout<<"\n";
-        for(long i=max(0,start-all_offsets[myRank]); i<=min(end-all_offsets[myRank],all_counts[myRank]-1) ;i++){
-            fout<<"\t("<<data[i].a-97<<","<<data[i].b-97;//<<","<<data[i].x<<","<<i <<")";
+        for(long i=min_long(0,start-all_offsets[myRank]); i<=min_long(end-all_offsets[myRank],all_counts[myRank]-1) ;i++){
+            fout<<"\t"<<dataset.data[i].key;//<<","<<data[i].x<<","<<i <<")";
             if(i%10==9)
                 fout<<"\n"<<myRank;
         }
@@ -614,7 +643,7 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
     }
     #ifdef DEBUG
     if(myRank==startproc)
-        printf("\npivot (%d,%d), pivotLocation %d",pivot_this.a-97,pivot_this.b-97,pivotLocation);
+        printf("\npivot (%d), pivotLocation %ld\n",pivot_key,pivotLocation);
     #endif
     int pivotProc=get_proc_from_ele_idx(pivotLocation,all_counts,nProcs);
     
@@ -654,6 +683,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
             if(num_swap_ele_left_procNo!=0){
                 if(myRank==right_procNo){//this is right processor
                     // send and receive
+                #ifdef DEBUG
+                    printf("\nnum_swap_ele_left_procNo:%d",num_swap_ele_left_procNo);
+                #endif
                     MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_left_procNo, num_swap_ele_left_procNo, mpi_data_t,
                             left_procNo, tree_level, left_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -661,6 +693,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
                 }
                 if(myRank==left_procNo){ //this is the left processor
                     // send and receive
+                    #ifdef DEBUG
+                    printf("\nnum_swap_ele_left_procNo:%d",num_swap_ele_left_procNo);
+                    #endif
                     MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_left_procNo, mpi_data_t, 
                             right_procNo, tree_level, right_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -678,6 +713,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
             if(num_swap_ele_left_procNo>0){
                 if(myRank==right_procNo){//this is right processor
                     // send and receive
+                    #ifdef DEBUG
+                    printf("\nnum_swap_ele_left_procNo:%d",num_swap_ele_left_procNo);
+                    #endif
                     MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_left_procNo, num_swap_ele_left_procNo, mpi_data_t,
                             left_procNo, tree_level, left_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -685,6 +723,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
                 }
                 if(myRank==left_procNo){ //this is the left processor
                     // send and receive
+                    #ifdef DEBUG
+                    printf("\nnum_swap_ele_left_procNo:%d",num_swap_ele_left_procNo);
+                    #endif
                     MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_left_procNo, mpi_data_t,
                             right_procNo, tree_level, right_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -702,6 +743,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
             if(num_swap_ele_right_procNo>0){
                 if(myRank==right_procNo){//this is right processor
                     // send and receive
+                    #ifdef DEBUG
+                    printf("\nnum_swap_ele_right_procNo:%d",num_swap_ele_right_procNo);
+                    #endif
                     MPI_Sendrecv_replace(dataset.data+right_procNo_data_start-num_swap_ele_right_procNo, num_swap_ele_right_procNo, mpi_data_t,
                             left_procNo, tree_level, left_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -710,6 +754,9 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
                 }
                 if(myRank==left_procNo){ //this is the left processor
                     // send and receive
+                    #ifdef DEBUG
+                    printf("\nnum_swap_ele_right_procNo:%d",num_swap_ele_right_procNo);
+                    #endif
                     MPI_Sendrecv_replace(dataset.data+left_procNo_data_start, num_swap_ele_right_procNo, mpi_data_t,
                             right_procNo, tree_level, right_procNo, tree_level,
                             MPI_COMM_WORLD, MPI_STATUS_IGNORE);
@@ -753,17 +800,26 @@ void pquickSort(dataset_t dataset, int32_t *all_counts, long *all_offsets, long 
         }
     }
     
+    int MAX_TREE_LEVEL=3;
+    MAX_TREE_LEVEL=INT_MAX;
+
     if(pivotLocation>start){
-        // printf("\ncalling on left: (%d,%d) ",start,pivotLocation-1);
-        // if(tree_level<=1)
-        #pragma omp task
-            pquickSort(dataset,all_counts,all_offsets,start,pivotLocation-1,tree_level+1);
+        // printf("\ncalling on left: (%ld,%ld) ",start,pivotLocation-1);
+        if(tree_level<=MAX_TREE_LEVEL)
+        {   if(tree_level==MAX_TREE_LEVEL && myRank==startproc)
+                printf("\ncalling on left: %d(%ld,%ld) ",tree_level,pivotLocation+1,end);
+            // #pragma omp task
+                pquickSort(dataset,all_counts,all_offsets,start,pivotLocation-1,tree_level);
+        }
     }
     if(pivotLocation<end){
-        // printf("\ncalling on right: (%d,%d) ",pivotLocation+1,end);
-        // if(true or tree_level<=1)
-        #pragma omp task
-            pquickSort(dataset,all_counts,all_offsets,pivotLocation+1,end,tree_level+1);
+        if(tree_level<=MAX_TREE_LEVEL)
+        {
+            if(tree_level==MAX_TREE_LEVEL && myRank==startproc)
+                printf("\ncalling on right: %d(%ld,%ld) ",tree_level,pivotLocation+1,end);
+            // #pragma omp task
+                pquickSort(dataset,all_counts,all_offsets,pivotLocation+1,end,tree_level);
+        }
         
     }
     #pragma omp taskwait
@@ -799,15 +855,15 @@ void sort1(dataset_t dataset){
         fout.open("output_dir/inp_"+ to_string(myRank)+".txt");
         fout<<"\n"<<myRank;
         for(int i=0; i<=all_counts[myRank]-1 ;i++){
-            fout<<"\t"<<data[i].a-97<<","<<data[i].b-97;//<<","<<data[i].x<<","<<i <<")";
+            fout<<"\t"<<dataset.data[i].key;//<<","<<data[i].x<<","<<i <<")";
         }
         fout.close();
     #endif
     MPI_Barrier(MPI_COMM_WORLD);
-    #pragma omp parallel
+    #pragma omp parallel num_threads(MY_NUM_OMP_THREADS)
         #pragma omp single
             pquickSort(dataset,all_counts,all_offsets,0,num_ele_sort-1,0);
-    //MPI_Barrier(MPI_COMM_WORLD);
+    MPI_Barrier(MPI_COMM_WORLD);
     #ifdef DEBUGOUT
         printf("writing output to output_dir/out_%d.txt",myRank);
         ofstream fout;

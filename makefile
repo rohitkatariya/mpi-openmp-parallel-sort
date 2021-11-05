@@ -19,3 +19,11 @@ gen:gen.cpp
 	mpirun -np 1 ./gen.out input_dir/inputfile1000 1000
 	mpirun -np 1 ./gen.out input_dir/inputfile100000 100000
 	mpirun -np 1 ./gen.out input_dir/inputfile10000000 10000000
+
+read:psort.cpp reading.cpp
+	mpic++ -c psort.cpp -o psort.o -fopenmp
+	ar cr libpsort.a psort.o
+	mpic++ -c reading.cpp -o reading.o -fopenmp
+	mpic++ reading.o libpsort.a -o a.out -fopenmp
+	# rm -rf input_dir/*.txt output_dir/*.txt output_dir/*.csv output_dir/*.mpi
+	

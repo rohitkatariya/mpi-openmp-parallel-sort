@@ -62,12 +62,29 @@ int main(int argc, char *argv[]) {
     #ifdef DEBUG
     printf("\nreading file %s",argv[1]);
     #endif
+    int algo_no = stoi(argv[2]);
+
     dataset_t this_ds = p.read(argv[1]);
-    p.sort(this_ds,ONE);
-    // p.sort(this_ds,TWO);
+    if(algo_no==1)
+    {
+        // if(myRank==0)
+        //   cout<<"algo:1";
+      p.sort(this_ds,ONE);
+    }
+    else if(algo_no==2)
+      {
+        // if(myRank==0)
+        //   cout<<"algo:2";
+        p.sort(this_ds,TWO);
+      }
+    else{
+      if(myRank==0)
+      cout<<"error in algo no";
+      // return 0;
+    }
     p.write(this_ds,"output_dir/out.mpi");
-    mpifileToTxt2(argv[1],"output_dir/in.csv");
-    mpifileToTxt2("output_dir/out.mpi","output_dir/out.csv");
+    // mpifileToTxt2(argv[1],"output_dir/in.csv");
+    // mpifileToTxt2("output_dir/out.mpi","output_dir/out.csv");
 
     MPI_Finalize();
 
