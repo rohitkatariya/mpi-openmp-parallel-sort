@@ -83,8 +83,8 @@ int main(int argc, char *argv[]) {
       // return 0;
     }
     p.write(this_ds,"output_dir/out.mpi");
-    // mpifileToTxt2(argv[1],"output_dir/in.csv");
-    // mpifileToTxt2("output_dir/out.mpi","output_dir/out.csv");
+    mpifileToTxt2(argv[1],"output_dir/in.csv");
+    mpifileToTxt2("output_dir/out.mpi","output_dir/out.csv");
 
     MPI_Finalize();
 

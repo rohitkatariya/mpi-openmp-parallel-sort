@@ -154,20 +154,28 @@ void merge_arr(T *data_arr,int start_idx ,int mid_idx , int end_idx){
 }
 
 template <typename T>
-void s_merge_sort_arr(T *data,int start_idx,int end_idx){
+void s_merge_sort_arr(T *data,int start_idx,int end_idx,int depth_sort=0){
     // shared memory merge sort using openmp tasks
     int myRank;
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank); // get my rank 
     if(start_idx>=end_idx)
         return;
     int mid_idx=(start_idx+end_idx)/2;
-    
-    
-    #pragma omp task 
-        s_merge_sort_arr(data,start_idx,mid_idx);
-    #pragma omp task
-        s_merge_sort_arr(data,mid_idx+1,end_idx);
-    #pragma omp taskwait
+    int numProcs = omp_get_num_procs();
+    // printf("\n%d,%d",numProcs,int(pow(2 ,depth_sort+1)));
+
+    if(pow(2,depth_sort)<numProcs){
+        #pragma omp task 
+            s_merge_sort_arr(data,start_idx,mid_idx,depth_sort+1);
+        #pragma omp task
+            s_merge_sort_arr(data,mid_idx+1,end_idx,depth_sort+1);
+        #pragma omp taskwait
+    }
+    else{
+        // printf("doing sequentially.");
+        s_merge_sort_arr(data,start_idx,mid_idx,depth_sort+1);
+        s_merge_sort_arr(data,mid_idx+1,end_idx,depth_sort+1);
+    }
     merge_arr(data, start_idx,mid_idx,end_idx);
 }
 
@@ -510,7 +518,7 @@ int internalPivoting(data_t *data,long start, long end,int pivot_this){
     return count_less;
 }
 
-void sQuickSort(data_t *data, long start, long end){
+void sQuickSort(data_t *data, long start, long end,int depth_sort=0){
     // return;
     if(start>=end)
         return;
@@ -519,15 +527,28 @@ void sQuickSort(data_t *data, long start, long end){
     data_t temp = data[pivot_loc];
     data[pivot_loc] = data[start];
     data[start]=temp;
-    if(pivot_loc>start){
-        #pragma omp task 
-        sQuickSort(data,start,pivot_loc-1);
+    int numProcs = omp_get_num_procs();
+    // printf("\n%d,%d",numProcs,int(pow(2 ,depth_sort+1)));
+
+    if(pow(2,depth_sort)<numProcs){
+        if(pivot_loc>start){
+            #pragma omp task 
+            sQuickSort(data,start,pivot_loc-1,depth_sort+1);
+        }
+        if(pivot_loc<end){
+            #pragma omp task 
+            sQuickSort(data,pivot_loc+1,end,depth_sort+1);
+        }
+        #pragma omp taskwait
+    }else{
+        // printf("doing sequential");
+        if(pivot_loc>start){
+            sQuickSort(data,start,pivot_loc-1,depth_sort+1);
+        }
+        if(pivot_loc<end){
+            sQuickSort(data,pivot_loc+1,end,depth_sort+1);
+        }
     }
-    if(pivot_loc<end){
-        #pragma omp task 
-        sQuickSort(data,pivot_loc+1,end);
-    }
-    #pragma omp taskwait
 }
 
 int get_proc_from_ele_idx(int32_t ele_idx, int32_t *all_counts,int nProcs){
